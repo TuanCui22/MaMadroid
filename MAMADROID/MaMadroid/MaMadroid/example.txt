@@ -1,0 +1,3 @@
+python mamadroid.py -f C:\Users\thanh\Downloads\input-mamadroid -d C:\Users\thanh\Downloads\output-mamadroid -m 1G
+
+python mamadroid.py -h
