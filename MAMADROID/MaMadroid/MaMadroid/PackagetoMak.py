@@ -5,7 +5,10 @@ info: Use Packages.txt as a list to call Markov.py to convert the files in the p
 import os
 import numpy as np
 from time import time
-import Markov as mk
+try:
+    from . import Markov as mk
+except ImportError:  # run as a script
+    import Markov as mk
 
 PACKETS = []
 

@@ -1,0 +1,64 @@
+MaMaDroid — Markov-chain behavioural features for Android APKs
+Copyright (c) 2026 TuanCui22. All rights reserved.
+
+This is a PRIVATE RESEARCH ARTEFACT, not open-source software.
+
+Licensed under the Private Research Artefact License v1.0.
+See the LICENSE file for the full terms.
+
+SPDX-License-Identifier: LicenseRef-Private-Research-1.0
+
+In short:
+
+  - Private, non-commercial research and educational use only.
+  - No redistribution, no commercial use, no hosted or network service.
+  - Analyse only APKs you are authorised to analyse.
+  - Provided "as is", with no warranty and no liability.
+
+If you received this software and did not receive it from the copyright holder,
+your copy is not licensed.
+
+--------------------------------------------------------------------------------
+PROVENANCE
+
+The method implemented here is from the NDSS 2017 paper:
+
+  MaMaDroid: Detecting Android Malware by Building Markov Chains of Behavioral
+  Models. Mariano Graziano, Davide Canali, Leyla Bilge, Ashwin Rao,
+  Davide Balzarotti. NDSS 2017.
+
+This repository is a maintained fork of the code released alongside that paper.
+The paper's method and any code inherited from the original release remain
+subject to the original authors' terms; this licence grants no rights to them.
+If you intend to redistribute or publish work derived from this, check the
+original release's licence first.
+
+--------------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS
+
+MaMaDroid's own source imports the Python standard library plus these packages.
+Nothing is vendored.
+
+  numpy          - BSD-3-Clause - https://numpy.org/
+  networkx       - BSD-3-Clause - https://networkx.org/
+  androguard     - Apache-2.0   - https://github.com/androguard/androguard
+  python-igraph  - GPL-2.0-or-later - https://igraph.org/python/
+
+  NOTE on python-igraph: it is GPL-2.0-or-later. It is imported as a normal
+  Python dependency, not vendored or linked into a binary, so this repository's
+  own code is not thereby placed under the GPL. Distributing a combined work
+  that includes igraph would be a different question - which is one reason this
+  artefact is licensed as non-redistributable.
+
+External tools invoked as subprocesses, never bundled:
+
+  apktool  - Apache-2.0 - used by the APK → call-graph stage.
+  Java/JVM - the androguard/dex2jar path needs a JRE on PATH.
+
+Development only (not shipped, not imported at runtime):
+
+  pytest   - MIT
+  ruff     - MIT
+  pyflakes - MIT
+
+No third-party source code is vendored in this repository.

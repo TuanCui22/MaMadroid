@@ -2,7 +2,10 @@
 import os
 from multiprocessing import Process
 import shutil
-from gml2txt import caller2callee, gml2graph
+try:
+    from .gml2txt import caller2callee, gml2graph
+except ImportError:  # run as a script from inside the package
+    from gml2txt import caller2callee, gml2graph
 
 
 def _preprocess_graph(app, _dir):

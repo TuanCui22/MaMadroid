@@ -1,107 +1,234 @@
-# mamadroid.py
+"""MaMaDroid pipeline: APK → call graph → abstracted sequence → Markov matrix.
 
+The 1.x entry point hard-coded three absolute Windows paths, so the repo only ran
+on the machine it was written on. It also swallowed every exception with a bare
+``except Exception`` and a log line, which meant a run that converted nothing
+still exited 0.
+
+This version keeps the same stages and the same output layout, and changes three
+things:
+
+* every path resolves from the package directory, overridable by environment;
+* a stage that fails is reported, and the process exit code reflects it;
+* the run produces a summary object instead of a pile of print statements.
+"""
+
+from __future__ import annotations
+
+import logging
 import os
 import time
-import argparse
-import logging
-from abstractGraph import _preprocess_graph
-from apk2graph import extractcg
-from gml2txt import caller2callee, gml2graph
-from markov_processor import process_files
+from dataclasses import dataclass, field
+from pathlib import Path
 
-def setup_logging(output):
-    logfile = os.path.join(output, 'MaMadroid/log.txt')
-    os.makedirs(os.path.dirname(logfile), exist_ok=True)
-    logging.basicConfig(filename=logfile, level=logging.INFO,
-                        format='%(asctime)s %(levelname)s %(message)s')
+from . import paths
+
+log = logging.getLogger("mamadroid")
+
+#: Package that provides each stage, so a missing dependency names itself.
+STAGE_REQUIREMENTS = {
+    "apk_to_gml": ("androguard", "networkx"),
+    "gml_to_txt": ("igraph",),
+    "abstract": (),
+    "features": ("numpy",),
+}
+
+
+class MissingDependency(Exception):
+    """A stage's third-party dependency is not installed."""
+
+    def __init__(self, stage: str, packages: tuple[str, ...]):
+        self.stage = stage
+        self.packages = packages
+        super().__init__(
+            "stage %r needs %s. Install with: python -m pip install %s"
+            % (stage, ", ".join(packages), " ".join(packages)))
+
+
+def _require(stage: str) -> None:
+    """Import the stage's dependencies, or say exactly what is missing."""
+    import importlib
+    missing = []
+    for package in STAGE_REQUIREMENTS.get(stage, ()):
+        try:
+            importlib.import_module(package)
+        except ImportError:
+            missing.append(package)
+    if missing:
+        raise MissingDependency(stage, tuple(missing))
+
+
+@dataclass
+class StageResult:
+    name: str
+    processed: int = 0
+    failed: list[str] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not self.failed
+
+
+@dataclass
+class RunSummary:
+    apk_dir: Path
+    output_dir: Path
+    stages: list[StageResult] = field(default_factory=list)
+    features: list[dict] = field(default_factory=list)
+    seconds: float = 0.0
+
+    @property
+    def ok(self) -> bool:
+        return all(stage.ok for stage in self.stages)
+
+    def as_dict(self) -> dict:
+        return {
+            "apk_dir": str(self.apk_dir),
+            "output_dir": str(self.output_dir),
+            "seconds": round(self.seconds, 2),
+            "ok": self.ok,
+            "stages": [
+                {"name": s.name, "processed": s.processed, "failed": s.failed}
+                for s in self.stages
+            ],
+            "features": self.features,
+        }
+
+
+def setup_logging(output: Path, level: str = "INFO") -> Path:
+    """Log to a file inside the output tree, and to stderr."""
+    log_dir = output / "MaMadroid"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    logfile = log_dir / "run.log"
+
+    root = logging.getLogger()
+    root.setLevel(getattr(logging, level.upper(), logging.INFO))
+    for handler in list(root.handlers):
+        root.removeHandler(handler)
+
+    file_handler = logging.FileHandler(logfile, encoding="utf-8")
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    root.addHandler(file_handler)
+
+    stream = logging.StreamHandler()
+    stream.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
+    root.addHandler(stream)
     return logfile
 
-def process_apk_to_gml(apkfile, gmlfile):
-    for filename in os.listdir(apkfile):
-        if filename.endswith(".apk"):
-            try:
-                gmlpath = os.path.join(gmlfile, filename.rpartition(".")[0] + ".gml")
-                filenames = os.path.join(apkfile, filename)
-                extractcg(filenames, gmlpath)
-            except Exception as e:
-                logging.error(f"Error processing {filename} to gml: {e}")
-            else:
-                logging.info(f"{filename} to gml done")
 
-def process_gml_to_txt(gmlfile, txtfile):
-    for gmlname in os.listdir(gmlfile):
+def apk_to_gml(apk_dir: Path, gml_dir: Path) -> StageResult:
+    """APK → call graph in GML. One bad APK does not stop the batch."""
+    _require("apk_to_gml")
+    from .apk2graph import extractcg
+
+    result = StageResult("apk_to_gml")
+    gml_dir.mkdir(parents=True, exist_ok=True)
+    for apk in sorted(apk_dir.glob("*.apk")):
+        target = gml_dir / (apk.stem + ".gml")
         try:
-            storepath = os.path.join(txtfile, gmlname.rpartition(".")[0] + ".txt")
-            gmlnames = os.path.join(gmlfile, gmlname)
-            g, edgelist = gml2graph(gmlnames)
-            caller2callee(edgelist, g.vs, storepath)
-        except Exception as e:
-            logging.error(f"Error processing {gmlname} to txt: {e}")
+            extractcg(str(apk), str(target))
+        except Exception as exc:  # noqa: BLE001 - per-file isolation is the point
+            log.warning("%s: could not extract a call graph (%s)", apk.name, exc)
+            result.failed.append(apk.name)
         else:
-            logging.info(f"{gmlname} to txt done")
+            result.processed += 1
+            log.info("%s: call graph written", apk.name)
+    return result
 
-def abstract_graphs(txtfile, app_dir, log):
-    num = 0
-    for txtname in os.listdir(txtfile):
+
+def gml_to_txt(gml_dir: Path, txt_dir: Path) -> StageResult:
+    """GML → caller/callee sequences, one line per call."""
+    _require("gml_to_txt")
+    from .gml2txt import caller2callee, gml2graph
+
+    result = StageResult("gml_to_txt")
+    txt_dir.mkdir(parents=True, exist_ok=True)
+    for gml in sorted(gml_dir.glob("*.gml")):
+        target = txt_dir / (gml.stem + ".txt")
         try:
-            txtpath = os.path.join(txtfile, txtname)
-            _preprocess_graph(txtpath, app_dir)
-            logging.info(f"{txtname.rpartition('.')[0]}.apk is abstracted")
-            num += 1
-        except Exception as e:
-            logging.error(f"Error processing {txtname}: {e}")
-            log.write(f"Error processing {txtname}: {e}\n")
-    log.write(f"{num} APKs processed.\n")
+            graph, edges = gml2graph(str(gml))
+            caller2callee(edges, graph.vs, str(target))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("%s: could not flatten the graph (%s)", gml.name, exc)
+            result.failed.append(gml.name)
+        else:
+            result.processed += 1
+    return result
 
-def process_markov_matrices(directory, output_path, type_, file_list, logfile):
-    process_files(directory, output_path, type_, file_list, logfile=logfile)
 
-def mamadroid_main(apk, output, memory):
-    gmlfile = os.path.join(output, 'MaMadroid/gml')
-    txtfile = os.path.join(output, 'MaMadroid/graphs', 'Trial1')
-    os.makedirs(gmlfile, exist_ok=True)
-    os.makedirs(txtfile, exist_ok=True)
+def abstract(txt_dir: Path, data_dir: Path) -> StageResult:
+    """Map raw calls onto the class/package/family vocabulary."""
+    _require("abstract")
+    from .abstractGraph import _preprocess_graph
 
-    logfile = setup_logging(output)
+    result = StageResult("abstract")
+    for txt in sorted(txt_dir.glob("*.txt")):
+        try:
+            _preprocess_graph(str(txt), str(data_dir))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("%s: could not abstract (%s)", txt.name, exc)
+            result.failed.append(txt.name)
+        else:
+            result.processed += 1
+            log.info("%s: abstracted", txt.name)
+    return result
 
-    process_apk_to_gml(apk, gmlfile)
-    process_gml_to_txt(gmlfile, txtfile)
 
-    with open(logfile, 'a') as log:
-        app_dir = os.path.normpath(r'C:\Users\thanh\Downloads\MAMADROID\MaMadroid\MaMadroid')
-        abstract_graphs(txtfile, app_dir, log)
+def run(apk_dir: str | Path, output_dir: str | Path, *,
+        data_dir: str | Path | None = None,
+        memory: str | None = None,
+        modes: tuple[str, ...] = ("Families", "Packages"),
+        log_level: str = "INFO") -> RunSummary:
+    """The whole pipeline. Returns a summary; never raises for one bad APK."""
+    started = time.time()
+    apk_dir = Path(apk_dir).expanduser().resolve()
+    output_dir = Path(output_dir).expanduser().resolve()
+    data_dir = Path(data_dir).expanduser().resolve() if data_dir else paths.DATA_DIR
 
-    output_path = os.path.join(output, 'MaMadroid' ,'Features')
-    family_output_path = os.path.join(output_path, 'Families')
-    package_output_path = os.path.join(output_path, 'Packages')
-    os.makedirs(family_output_path, exist_ok=True)
-    os.makedirs(package_output_path, exist_ok=True)
+    if not apk_dir.is_dir():
+        raise FileNotFoundError("APK directory not found: %s" % apk_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    family_directory = r'C:\Users\thanh\Downloads\MAMADROID\MaMadroid\MaMadroid\family'
-    family_file_list = r'C:\Users\thanh\Downloads\MAMADROID\MaMadroid\MaMadroid\Families11.txt'
-    process_markov_matrices(family_directory, output_path, "Families", family_file_list, logfile)
+    if memory:
+        os.environ["JAVA_TOOL_OPTIONS"] = "-Xmx%s" % memory
 
-    package_directory = r'C:\Users\thanh\Downloads\MAMADROID\MaMadroid\MaMadroid\package'
-    package_file_list = r'C:\Users\thanh\Downloads\MAMADROID\MaMadroid\MaMadroid\Packages.txt'
-    process_markov_matrices(package_directory, output_path, "Packages", package_file_list, logfile)
+    setup_logging(output_dir, log_level)
+    summary = RunSummary(apk_dir=apk_dir, output_dir=output_dir)
+    log.info("MaMaDroid run: %s -> %s", apk_dir, output_dir)
 
-    logging.info("All processing steps completed.")
+    gml_dir = output_dir / "MaMadroid" / "gml"
+    txt_dir = output_dir / "MaMadroid" / "graphs" / "Trial1"
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Run MaMaDroid on a set of APK files.')
-    parser.add_argument('-f', '--file', required=True, help='Path to the directory containing APK files.')
-    parser.add_argument('-d', '--dir', required=True, help='Path to the output directory.')
-    parser.add_argument('-m', '--memory', default='2G', help='Amount of memory allocated to the JVM heap space (e.g., 2G for 2 GB).')
+    summary.stages.append(apk_to_gml(apk_dir, gml_dir))
+    summary.stages.append(gml_to_txt(gml_dir, txt_dir))
+    summary.stages.append(abstract(txt_dir, data_dir))
 
-    args = parser.parse_args()
+    features_root = output_dir / "MaMadroid" / "Features"
+    reference = {
+        "Families": (paths.FAMILY_GRAPHS_DIR, paths.FAMILIES_FILE),
+        "Packages": (paths.PACKAGE_GRAPHS_DIR, paths.PACKAGES_FILE),
+        "Classes": (paths.CLASS_GRAPHS_DIR, paths.CLASSES_FILE),
+    }
+    for mode in modes:
+        graph_dir, list_file = reference[mode]
+        if not graph_dir.is_dir():
+            log.warning("%s: reference graphs missing at %s; skipping this mode",
+                        mode, graph_dir)
+            summary.features.append({"mode": mode, "skipped": "reference graphs missing"})
+            continue
+        _require("features")
+        from .markov_processor import build as build_features
 
-    # Set JVM heap size
-    os.environ['JAVA_TOOL_OPTIONS'] = f'-Xmx{args.memory}'
+        try:
+            built = build_features(graph_dir, features_root, mode, list_file)
+        except FileNotFoundError as exc:
+            log.warning("%s: %s", mode, exc)
+            summary.features.append({"mode": mode, "skipped": str(exc)})
+        else:
+            summary.features.append(built.as_dict())
 
-    time_start = time.time()
-    try:
-        mamadroid_main(args.file, args.dir, args.memory)
-    except Exception as e:
-        logging.error(f"An exception occurred while running Mamadroid: {e}")
-    time_end = time.time()
-    logging.info(f"Total time cost: {time_end - time_start} s")
+    summary.seconds = time.time() - started
+    log.info("finished in %.1fs (%s)", summary.seconds,
+             "clean" if summary.ok else "with failures")
+    return summary

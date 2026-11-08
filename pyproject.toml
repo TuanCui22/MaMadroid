@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mamadroid"
+version = "2.0.0"
+description = "Markov-chain behavioural features from Android APKs (MaMaDroid, NDSS 2017)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "LicenseRef-Private-Research-1.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "TuanCui22" }]
+keywords = ["android", "malware", "markov-chain", "static-analysis", "research"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+]
+# The analysis stages need these. They are declared here rather than in a
+# requirements.txt because the README used to tell you to `pip install -r
+# requirements.txt` and no such file existed.
+dependencies = [
+  "numpy>=1.26",
+  "networkx>=3.0",
+  "androguard>=4.1",
+  "python-igraph>=0.11",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6", "pyflakes>=3.2"]
+
+[project.scripts]
+mamadroid = "MaMadroid.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["MaMadroid*"]
+
+[tool.pytest.ini_options]
+testpaths = ["MAMADROID/MaMadroid/MaMadroid/tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B"]
+ignore = ["E501"]

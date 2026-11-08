@@ -1,71 +1,148 @@
-# MaMaDroid (Updated Version)
+# MaMaDroid — Markov-chain behavioural features for Android APKs
 
-**MaMaDroid** is a machine learning-based Android malware detection system originally introduced in the NDSS 2017 paper.  
-This version has been completely updated and refactored to work with modern Python environments and tooling.
+Turns an APK into a fixed-size numeric feature vector by walking its call graph
+and recording which abstracted API states transition into which. The vector is
+what a classifier consumes; this repository produces the vector, not the
+classifier.
 
-## 🔧 Key Updates
-
-- ✅ Migrated to Python 3
-- ✅ Refactored and cleaned up the original codebase
-- ✅ Updated all dependencies to latest compatible versions
-- ✅ Improved overall compatibility and stability
-
----
-
-## 📦 Features
-
-- Extracts API call sequences from APK files
-- Constructs behavioral models using Markov chains
-- Classifies Android apps as benign or malicious
-- Supports family-based, package-based, and class-based analysis modes
+This is a maintained fork of the code released with the NDSS 2017 paper
+*MaMaDroid: Detecting Android Malware by Building Markov Chains of Behavioral
+Models* (Graziano, Canali, Bilge, Rao, Balzarotti). The method is theirs. The
+packaging, the path handling and the vectorised matrix build are this fork's.
 
 ---
 
-## ⚙️ Installation
+## What changed in 2.0
 
-Make sure `apktool`, `Java`, and `androguard` are installed.
+The 1.x code worked on exactly one machine, and the README told you to install a
+`requirements.txt` that did not exist.
+
+| 1.x | 2.0 |
+|---|---|
+| three absolute `C:\Users\thanh\...` paths inside `mamadroid_main` | every path resolves from the package directory, overridable by `MAMADROID_*` env vars |
+| `requirements.txt` referenced but absent | dependencies declared in `pyproject.toml` |
+| `python mamadroid.py -f … -d …` | `mamadroid -i … -o …`, plus `--json` for machine output |
+| triple Python loop per app for the matrix | `numpy.add.at` scatter-add; same matrix, verified against the old algorithm in a test |
+| `except Exception` + log line, exit 0 | per-stage failure lists, exit code reflects them |
+| CSV written with `','.join` | `csv.writer` — a filename containing a comma no longer breaks the row |
+| bare-name imports (`from gml2txt import …`) | relative imports with a script-mode fallback, so both invocation styles work |
+| `--help` failed without igraph installed | analysis imports are lazy; `--help` and `--version` work on a bare Python |
+| log file read back and printed | logging goes to the file and to stderr, once |
+
+The matrix build is the change that matters for throughput. The original did, for
+every call in every app, a nested loop over the whole state space. For a few
+thousand APKs against a 400-node vocabulary that is tens of millions of
+interpreted iterations. The replacement encodes once, scatter-adds once, and
+normalises once — and a test asserts it produces the same matrix as the original
+loop, so the speedup is not a behaviour change.
+
+---
+
+## Install
 
 ```bash
 git clone https://github.com/TuanCui22/MaMadroid.git
 cd MaMadroid
-pip install -r requirements.txt
-````
+python -m pip install -e .
+```
 
----
+The analysis stages also need a JVM and `apktool` on `PATH` (the APK → call-graph
+stage shells out to them). `python -m pip install -e ".[dev]"` adds the test
+tools.
 
-## 🚀 Usage
+## Use
 
 ```bash
-python mamadroid.py -i /path/to/apk/ -o output_dir/ -m family
+mamadroid -i /path/to/apks -o /path/to/output
 ```
 
-| Option | Description                                    |
-| ------ | ---------------------------------------------- |
-| `-i`   | Path to the input directory with APK files     |
-| `-o`   | Path to the output directory                   |
-| `-m`   | Modeling mode: `family`, `package`, or `class` |
+| flag | meaning |
+|---|---|
+| `-i, --input DIR` | directory of `.apk` files to analyse |
+| `-o, --output DIR` | where graphs, sequences and feature CSVs are written |
+| `-m, --mode MODE` | `Families`, `Packages` or `Classes`; repeatable. Default: Families and Packages |
+| `--data-dir DIR` | where `classes.txt`, `Packages.txt`, `Families11.txt` live |
+| `--memory SIZE` | JVM heap for the APK tooling, e.g. `2G` |
+| `--json` | print the run summary as JSON instead of text |
 
----
+Exit codes: `0` clean, `1` a stage had failures, `2` a path is wrong, `3` a
+required reference file or dependency is missing.
 
-## 🧠 Based On
+### What it produces
+
+```
+output/
+  MaMadroid/
+    run.log              every stage, every file, timestamped
+    gml/                 one call graph per APK
+    graphs/Trial1/       one caller→callee sequence per APK
+    Features/
+      Families/result.csv
+      Packages/result.csv
+```
+
+Each `result.csv` has one row per APK: `filename`, then one column per
+`stateAToB` pair. The column set is fixed by the reference list, so rows from
+different runs line up.
+
+## Reference data
+
+The state vocabulary comes from three lists shipped in the package:
+`classes.txt`, `Packages.txt`, `Families11.txt`. Two synthetic states
+(`self-defined`, `obfuscated`) are appended, matching the published feature set —
+a model trained on the paper's features expects those columns to exist.
+
+If your reference data lives elsewhere, point at it:
+
+```bash
+export MAMADROID_DATA_DIR=/data/mamadroid
+# or per file:
+export MAMADROID_PACKAGES=/data/mamadroid/Packages.txt
+```
+
+A missing reference file is reported by name with the variable to set, at the
+start of the run — not as a `FileNotFoundError` after twenty minutes of APK
+conversion.
+
+## Tests
+
+```bash
+python -m pytest -q          # 14 tests, no APKs, no Java, no network
+```
+
+The suite covers the matrix build (including a comparison against the original
+loop algorithm), the zero-row case, unknown-label handling, CSV quoting, per-app
+failure isolation, and the path resolution that used to be hard-coded.
+
+## Layout
+
+```
+MAMADROID/MaMadroid/MaMadroid/
+  cli.py               argument parsing, exit codes
+  mamadroid.py         the pipeline: apk → gml → txt → abstract → features
+  paths.py             every path, resolved once, env-overridable
+  Markov.py            the transition matrix (vectorised)
+  markov_processor.py  feature-matrix assembly and CSV output
+  abstractGraph.py     call → abstract state mapping
+  apk2graph.py         APK → call graph
+  gml2txt.py           graph → caller/callee sequences
+  parse.py             label parsing
+  FamilytoMak.py       standalone family-mode driver (legacy)
+  PackagetoMak.py      standalone package-mode driver (legacy)
+  tests/test_markov.py
+```
+
+`FamilytoMak.py` and `PackagetoMak.py` are the original standalone drivers, kept
+because the paper's reproduction steps reference them. The `mamadroid` command
+does the same work with path handling that is not machine-specific.
+
+## Citation
 
 > MaMaDroid: Detecting Android Malware by Building Markov Chains of Behavioral Models
-> *Mariano Graziano, Davide Canali, Leyla Bilge, Ashwin Rao, and Davide Balzarotti*
+> Mariano Graziano, Davide Canali, Leyla Bilge, Ashwin Rao, Davide Balzarotti
 > NDSS 2017
-> [Read the paper](https://www.ndss-symposium.org/ndss2017/ndss-2017-programme/mamadroid-detecting-android-malware-building-markov-chains-behavioral-models/)
 
----
+## Licence
 
-## 📜 License
-
-This project is intended for academic and research purposes only.
-
----
-
-```
-
----
-
-### 🧾 GitHub Repository Description (short, for the repo)
-
-> A refactored and modernized version of MaMaDroid, a machine learning-based Android malware detection tool using behavioral modeling and Markov chains.
+Private research artefact. Not open source, not for redistribution. See
+[`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).

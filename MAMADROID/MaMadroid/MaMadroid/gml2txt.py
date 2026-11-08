@@ -3,7 +3,10 @@
 import os
 import igraph
 from collections import defaultdict
-from parse import parse_label
+try:
+    from .parse import parse_label
+except ImportError:  # run as a script
+    from parse import parse_label
 
 def caller2callee(edgelist, nodes, filename):
     """

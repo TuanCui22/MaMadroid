@@ -1,48 +1,117 @@
-# markov_processor.py
+"""Feature-matrix assembly for one mode (class, package or family).
 
-import os
-import numpy as np
-from time import time
-from Markov import main
+The 1.x version wrote the CSV with a hand-rolled ``','.join`` loop, which breaks
+on any filename containing a comma and gives no header quoting. It also read the
+log file back and printed it, which is not this function's job.
 
-def process_files(directory, output_path, which_class, filename_list, logfile=None, wf='Y'):
-    packets = []
-    with open(filename_list) as file:
-        packets = [line.strip() for line in file]
+This version writes through ``csv.writer`` and returns a small summary instead of
+printing. The caller decides what to show.
+"""
 
-    allnodes = packets + ['self-defined', 'obfuscated']
+from __future__ import annotations
 
-    header = ['filename']
-    for i in range(len(allnodes)):
-        for j in range(len(allnodes)):
-            header.append(allnodes[i] + 'To' + allnodes[j])
+import csv
+import logging
+from dataclasses import dataclass
+from pathlib import Path
 
-    database_res = [header]
-    num_apps = os.listdir(directory)
-    print(f"Processing {len(num_apps)} apps...")
+from .Markov import flatten
+from .Markov import main as build_matrix
 
-    for index, app in enumerate(num_apps):
-        print(f'Starting {index + 1} of {len(num_apps)}')
-        with open(os.path.join(directory, app)) as file:
-            specific_app = [line.strip() for line in file]
-
-        start_time = time()
-        mark_mat = main(specific_app, allnodes, wf)
-        print(f"Dimensions of mark_mat: {len(mark_mat)}, {len(mark_mat[0])}")
-        print(f"Expected dimensions: {len(allnodes)}, {len(allnodes)}")
+log = logging.getLogger("mamadroid.features")
 
 
-        mark_row = [app] + [item for sublist in mark_mat for item in sublist]
-        database_res.append(mark_row)
-        print(f'Finished {app} in {time() - start_time} seconds.')
+@dataclass
+class FeatureSummary:
+    mode: str
+    apps: int
+    states: int
+    output: Path
+    failed: list[str]
 
-    with open(os.path.join(output_path, which_class, 'result.csv'), 'w') as file:
-        for line in database_res:
-            file.write(','.join(str(item) for item in line) + '\n')
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "mode": self.mode,
+            "apps": self.apps,
+            "states": self.states,
+            "output": str(self.output),
+            "failed": self.failed,
+        }
 
-    print(f"Data saved to {os.path.join(output_path, which_class, 'result.csv')}")
 
-    # If logfile is provided, read it
+def load_nodes(list_file: str | Path) -> list[str]:
+    """The reference list, plus the two synthetic states the model always has."""
+    path = Path(list_file)
+    if not path.is_file():
+        raise FileNotFoundError(
+            "reference list not found: %s. This file defines the Markov state "
+            "space; without it every app produces a zero matrix." % path)
+    with path.open(encoding="utf-8", errors="replace") as handle:
+        nodes = [line.strip() for line in handle if line.strip()]
+    # Kept for parity with the original model: these two states exist in the
+    # published feature set and a model trained on it expects them.
+    for synthetic in ("self-defined", "obfuscated"):
+        if synthetic not in nodes:
+            nodes.append(synthetic)
+    return nodes
+
+
+def build(directory: str | Path, output_path: str | Path, mode: str,
+          list_file: str | Path, *, wf: str = "Y") -> FeatureSummary:
+    """Build ``result.csv`` for one mode.
+
+    One unreadable app is recorded and skipped; it does not abort the run. That
+    matters because a corpus of a few thousand APKs almost always contains one
+    that the abstractor could not handle.
+    """
+    directory = Path(directory)
+    output_path = Path(output_path)
+    if not directory.is_dir():
+        raise FileNotFoundError("graph directory not found: %s" % directory)
+
+    nodes = load_nodes(list_file)
+    header = ["filename"]
+    for source in nodes:
+        for target in nodes:
+            header.append("%sTo%s" % (source, target))
+
+    apps = sorted(p for p in directory.iterdir() if p.is_file())
+    log.info("%s: %d app(s), %d state(s)", mode, len(apps), len(nodes))
+
+    rows: list[list[object]] = []
+    failed: list[str] = []
+    for app in apps:
+        try:
+            with app.open(encoding="utf-8", errors="replace") as handle:
+                sequence = [line.rstrip("\n") for line in handle]
+            matrix = build_matrix(sequence, nodes, wf)
+        except Exception as exc:  # noqa: BLE001 - one bad app must not stop the run
+            log.warning("%s: could not build a matrix (%s)", app.name, exc)
+            failed.append(app.name)
+            continue
+        rows.append([app.name] + flatten(matrix))
+
+    out_dir = output_path / mode
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_file = out_dir / "result.csv"
+    with out_file.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(header)
+        writer.writerows(rows)
+
+    log.info("%s: wrote %s (%d row(s), %d failed)", mode, out_file, len(rows), len(failed))
+    return FeatureSummary(mode=mode, apps=len(rows), states=len(nodes),
+                          output=out_file, failed=failed)
+
+
+def process_files(directory: str | Path, output_path: str | Path, which_class: str,
+                  filename_list: str | Path, logfile: str | Path | None = None,
+                  wf: str = "Y") -> FeatureSummary:
+    """1.x-compatible entry point.
+
+    ``logfile`` is accepted and ignored beyond a debug note: the 1.x version read
+    the log back and printed it, which duplicated every line already on stderr.
+    """
     if logfile:
-        with open(logfile, 'r') as log:
-            print(log.read())  # Print the content of the log file
+        log.debug("logfile argument is accepted for compatibility and not re-read")
+    return build(directory, output_path, which_class, filename_list, wf=wf)
