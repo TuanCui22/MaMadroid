@@ -1,15 +1,8 @@
 """Paths and defaults for MaMaDroid, resolved once.
 
-The 1.x code hard-coded three absolute Windows paths inside ``mamadroid_main``:
-
-    C:\\Users\\thanh\\Downloads\\MAMADROID\\MaMadroid\\MaMadroid
-    C:\\Users\\thanh\\Downloads\\MAMADROID\\MaMadroid\\MaMadroid\\family
-    C:\\Users\\thanh\\Downloads\\MAMADROID\\MaMadroid\\MaMadroid\\Families11.txt
-
-That is why the repo only ever ran on one machine. Everything here resolves
-relative to the package directory, so a clone runs anywhere, and every value can
-be overridden by an environment variable for the case where the data lives
-somewhere else.
+Everything resolves relative to the package directory, so a clone runs anywhere,
+and every value can be overridden by an environment variable for the case where
+the reference data lives somewhere else.
 
 Nothing here reads a file or creates a directory at import time: importing a
 module should not have side effects.

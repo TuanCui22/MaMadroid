@@ -1,16 +1,16 @@
 """Markov transition matrices, vectorised.
 
-The 1.x implementation built the matrix with a triple Python loop over every
-call in every app, then normalised row by row. For a corpus of a few thousand
-APKs against a 400-node state space that is tens of millions of interpreted
-iterations, and it was the slowest stage of the pipeline by a wide margin.
+A corpus of a few thousand APKs against a 400-node state space is tens of
+millions of transitions. Building that with a nested Python loop per call is the
+slowest possible shape for the work, so the matrix is assembled with
+``numpy.add.at`` over index arrays: one pass to encode labels, one scatter-add,
+one normalisation.
 
-This version builds the same matrix with ``numpy.add.at`` over index arrays: one
-pass to encode labels, one scatter-add, one normalisation. Same result, and the
-row-normalisation is now explicit about the zero-row case instead of leaving a
-silent all-zero row.
+Row normalisation is explicit about the zero-row case: a state with no outgoing
+transitions stays all-zero rather than becoming NaN, because "never left this
+state" and "this state does not exist" are different facts.
 
-The public API is unchanged: ``main(imported, allnodes, wf)`` returns the same
+Public API: ``main(imported, allnodes, wf)`` returns a
 ``(len(allnodes), len(allnodes))`` float matrix.
 """
 
@@ -25,8 +25,7 @@ def encode(labels: Sequence[str], index: dict[str, int]) -> np.ndarray:
     """Map labels to their index, dropping anything unknown.
 
     Dropping unknown labels is deliberate: the state space is fixed by the
-    reference lists, and a label outside it is not a state. The 1.x loop did the
-    same thing implicitly by only appending on a match.
+    reference lists, and a label outside it is not a state.
     """
     return np.array([index[label] for label in labels if label in index],
                     dtype=np.int64)
@@ -74,10 +73,10 @@ def matrix_creation(encoded: Sequence[np.ndarray],
 
 
 def main(imported: Iterable[str], alln: Sequence[str], wf: str = "Y") -> np.ndarray:
-    """Encode and build in one call. Same contract as the 1.x ``main``."""
+    """Encode and build in one call."""
     return matrix_creation(dummy_coding(imported, alln, wf), alln)
 
 
 def flatten(matrix: np.ndarray) -> list[float]:
-    """Row-major flatten, matching the CSV column order of the 1.x output."""
+    """Row-major flatten, matching the CSV column order."""
     return [float(value) for value in matrix.reshape(-1)]

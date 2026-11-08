@@ -1,16 +1,11 @@
 """MaMaDroid pipeline: APK → call graph → abstracted sequence → Markov matrix.
 
-The 1.x entry point hard-coded three absolute Windows paths, so the repo only ran
-on the machine it was written on. It also swallowed every exception with a bare
-``except Exception`` and a log line, which meant a run that converted nothing
-still exited 0.
+Three properties shape it:
 
-This version keeps the same stages and the same output layout, and changes three
-things:
-
-* every path resolves from the package directory, overridable by environment;
-* a stage that fails is reported, and the process exit code reflects it;
-* the run produces a summary object instead of a pile of print statements.
+* every path resolves from the package directory and is overridable by
+  environment, so a clone runs anywhere;
+* a stage that fails is reported per file, and the exit code reflects it;
+* the run returns a summary object rather than printing as it goes.
 """
 
 from __future__ import annotations

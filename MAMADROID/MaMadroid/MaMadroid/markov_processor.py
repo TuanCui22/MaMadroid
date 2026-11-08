@@ -1,11 +1,8 @@
 """Feature-matrix assembly for one mode (class, package or family).
 
-The 1.x version wrote the CSV with a hand-rolled ``','.join`` loop, which breaks
-on any filename containing a comma and gives no header quoting. It also read the
-log file back and printed it, which is not this function's job.
-
-This version writes through ``csv.writer`` and returns a small summary instead of
-printing. The caller decides what to show.
+Output goes through ``csv.writer``: a hand-rolled join breaks on any filename
+containing a comma and quotes nothing. The function returns a summary rather than
+printing, so the caller decides what to show.
 """
 
 from __future__ import annotations
@@ -107,10 +104,10 @@ def build(directory: str | Path, output_path: str | Path, mode: str,
 def process_files(directory: str | Path, output_path: str | Path, which_class: str,
                   filename_list: str | Path, logfile: str | Path | None = None,
                   wf: str = "Y") -> FeatureSummary:
-    """1.x-compatible entry point.
+    """Compatibility entry point.
 
-    ``logfile`` is accepted and ignored beyond a debug note: the 1.x version read
-    the log back and printed it, which duplicated every line already on stderr.
+    ``logfile`` is accepted and ignored beyond a debug note: the log is already
+    on stderr, and re-reading it would duplicate every line.
     """
     if logfile:
         log.debug("logfile argument is accepted for compatibility and not re-read")
