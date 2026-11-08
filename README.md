@@ -12,29 +12,17 @@ packaging, the path handling and the vectorised matrix build are this fork's.
 
 ---
 
-## What changed in 2.0
+## Capabilities
 
-The 1.x code worked on exactly one machine, and the README told you to install a
-`requirements.txt` that did not exist.
-
-| 1.x | 2.0 |
+| | |
 |---|---|
-| three absolute `C:\Users\thanh\...` paths inside `mamadroid_main` | every path resolves from the package directory, overridable by `MAMADROID_*` env vars |
-| `requirements.txt` referenced but absent | dependencies declared in `pyproject.toml` |
-| `python mamadroid.py -f … -d …` | `mamadroid -i … -o …`, plus `--json` for machine output |
-| triple Python loop per app for the matrix | `numpy.add.at` scatter-add; same matrix, verified against the old algorithm in a test |
-| `except Exception` + log line, exit 0 | per-stage failure lists, exit code reflects them |
-| CSV written with `','.join` | `csv.writer` — a filename containing a comma no longer breaks the row |
-| bare-name imports (`from gml2txt import …`) | relative imports with a script-mode fallback, so both invocation styles work |
-| `--help` failed without igraph installed | analysis imports are lazy; `--help` and `--version` work on a bare Python |
-| log file read back and printed | logging goes to the file and to stderr, once |
-
-The matrix build is the change that matters for throughput. The original did, for
-every call in every app, a nested loop over the whole state space. For a few
-thousand APKs against a 400-node vocabulary that is tens of millions of
-interpreted iterations. The replacement encodes once, scatter-adds once, and
-normalises once — and a test asserts it produces the same matrix as the original
-loop, so the speedup is not a behaviour change.
+| **Three abstraction modes** | `Families`, `Packages` and `Classes`, selectable per run and repeatable. Each defines its own state vocabulary. |
+| **Vectorised matrix build** | Transitions are accumulated with a single scatter-add over index arrays rather than a nested loop per call. A test asserts the result matches the reference algorithm exactly. |
+| **Portable paths** | Every path resolves from the package directory and is overridable with `MAMADROID_*` environment variables. A missing reference file is reported by name at the start of the run. |
+| **Per-app isolation** | An APK that fails to convert is recorded and skipped; the batch continues and the exit code reflects it. |
+| **Structured output** | One CSV per mode, one row per APK, a fixed column set so rows from different runs line up. `--json` for machine consumption. |
+| **Lazy analysis imports** | `--help` and `--version` work on a bare Python. A missing analysis dependency names the package and the install command. |
+| **Honest zero rows** | A state with no outgoing transitions stays all-zero rather than becoming NaN — "never left this state" and "this state does not exist" are different facts. |
 
 ---
 
@@ -47,8 +35,7 @@ python -m pip install -e .
 ```
 
 The analysis stages also need a JVM and `apktool` on `PATH` (the APK → call-graph
-stage shells out to them). `python -m pip install -e ".[dev]"` adds the test
-tools.
+stage shells out to them). `python -m pip install -e ".[dev]"` adds the test tools.
 
 ## Use
 
@@ -56,7 +43,7 @@ tools.
 mamadroid -i /path/to/apks -o /path/to/output
 ```
 
-| flag | meaning |
+| Flag | Meaning |
 |---|---|
 | `-i, --input DIR` | directory of `.apk` files to analyse |
 | `-o, --output DIR` | where graphs, sequences and feature CSVs are written |
@@ -64,11 +51,12 @@ mamadroid -i /path/to/apks -o /path/to/output
 | `--data-dir DIR` | where `classes.txt`, `Packages.txt`, `Families11.txt` live |
 | `--memory SIZE` | JVM heap for the APK tooling, e.g. `2G` |
 | `--json` | print the run summary as JSON instead of text |
+| `--log-level LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 
 Exit codes: `0` clean, `1` a stage had failures, `2` a path is wrong, `3` a
 required reference file or dependency is missing.
 
-### What it produces
+### Output
 
 ```
 output/
@@ -83,7 +71,7 @@ output/
 
 Each `result.csv` has one row per APK: `filename`, then one column per
 `stateAToB` pair. The column set is fixed by the reference list, so rows from
-different runs line up.
+different runs align.
 
 ## Reference data
 
@@ -92,7 +80,7 @@ The state vocabulary comes from three lists shipped in the package:
 (`self-defined`, `obfuscated`) are appended, matching the published feature set —
 a model trained on the paper's features expects those columns to exist.
 
-If your reference data lives elsewhere, point at it:
+To point at reference data elsewhere:
 
 ```bash
 export MAMADROID_DATA_DIR=/data/mamadroid
@@ -100,19 +88,15 @@ export MAMADROID_DATA_DIR=/data/mamadroid
 export MAMADROID_PACKAGES=/data/mamadroid/Packages.txt
 ```
 
-A missing reference file is reported by name with the variable to set, at the
-start of the run — not as a `FileNotFoundError` after twenty minutes of APK
-conversion.
-
 ## Tests
 
 ```bash
 python -m pytest -q          # 14 tests, no APKs, no Java, no network
 ```
 
-The suite covers the matrix build (including a comparison against the original
-loop algorithm), the zero-row case, unknown-label handling, CSV quoting, per-app
-failure isolation, and the path resolution that used to be hard-coded.
+Coverage includes the matrix build (compared against the reference algorithm), the
+zero-row case, unknown-label handling, CSV quoting, per-app failure isolation, and
+path resolution.
 
 ## Layout
 
@@ -127,14 +111,14 @@ MAMADROID/MaMadroid/MaMadroid/
   apk2graph.py         APK → call graph
   gml2txt.py           graph → caller/callee sequences
   parse.py             label parsing
-  FamilytoMak.py       standalone family-mode driver (legacy)
-  PackagetoMak.py      standalone package-mode driver (legacy)
+  FamilytoMak.py       standalone family-mode driver
+  PackagetoMak.py      standalone package-mode driver
   tests/test_markov.py
 ```
 
-`FamilytoMak.py` and `PackagetoMak.py` are the original standalone drivers, kept
-because the paper's reproduction steps reference them. The `mamadroid` command
-does the same work with path handling that is not machine-specific.
+`FamilytoMak.py` and `PackagetoMak.py` are the standalone drivers referenced by
+the paper's reproduction steps. The `mamadroid` command performs the same work
+with portable path handling.
 
 ## Citation
 

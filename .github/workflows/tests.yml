@@ -1,0 +1,43 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # The Markov tests need numpy only. igraph, androguard and networkx are
+      # needed by the APK stages, which these tests do not exercise - installing
+      # them would add minutes to every matrix leg for nothing.
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy pytest ruff pyflakes
+
+      - name: Lint
+        run: |
+          python -m ruff check MAMADROID/MaMadroid/MaMadroid/Markov.py MAMADROID/MaMadroid/MaMadroid/markov_processor.py MAMADROID/MaMadroid/MaMadroid/paths.py MAMADROID/MaMadroid/MaMadroid/cli.py MAMADROID/MaMadroid/MaMadroid/mamadroid.py MAMADROID/MaMadroid/MaMadroid/tests
+          python -m pyflakes MAMADROID/MaMadroid/MaMadroid/Markov.py MAMADROID/MaMadroid/MaMadroid/markov_processor.py MAMADROID/MaMadroid/MaMadroid/paths.py MAMADROID/MaMadroid/MaMadroid/cli.py MAMADROID/MaMadroid/MaMadroid/mamadroid.py
+
+      - name: Test
+        run: python -m pytest -q
+
+      - name: CLI smoke
+        run: python -m MaMadroid.cli --version
+        working-directory: MAMADROID/MaMadroid
