@@ -13,10 +13,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import Sequence
 
 from . import __version__, paths
 from .mamadroid import MissingDependency, run
+from .report import write as write_report
 
 EXIT_OK = 0
 EXIT_PARTIAL = 1
@@ -49,6 +51,11 @@ def build_parser() -> argparse.ArgumentParser:
                         help="DEBUG, INFO, WARNING, ERROR (default INFO)")
     parser.add_argument("--json", dest="json_out", action="store_true",
                         help="print the run summary as JSON on stdout")
+    parser.add_argument("--report", metavar="PATH",
+                        help="also write a self-contained HTML run report")
+    parser.add_argument("--summary-in", metavar="PATH",
+                        help="a run summary JSON to embed in the report "
+                             "(default: the one this run wrote)")
     return parser
 
 
@@ -92,6 +99,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                           % (entry["mode"], entry["apps"], entry["states"],
                              entry["output"]))
         print("\nfinished in %.1fs" % summary.seconds)
+
+    if args.report:
+        summary_path = args.summary_in
+        if not summary_path:
+            # The run already wrote one next to the output; use it so the page
+            # shows the same numbers this process just printed.
+            candidate = Path(args.output).expanduser() / "MaMadroid" / "run-summary.json"
+            summary_path = str(candidate) if candidate.is_file() else None
+        out = write_report(args.output, args.report, summary_path=summary_path)
+        print("wrote %s" % out)
 
     return EXIT_OK if summary.ok else EXIT_PARTIAL
 

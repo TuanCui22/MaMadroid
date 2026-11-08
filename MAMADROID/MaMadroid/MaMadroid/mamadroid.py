@@ -10,6 +10,7 @@ Three properties shape it:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -224,6 +225,18 @@ def run(apk_dir: str | Path, output_dir: str | Path, *,
             summary.features.append(built.as_dict())
 
     summary.seconds = time.time() - started
+
+    # Persist the summary so `--report` and any later tooling read the same
+    # numbers this run printed, rather than recomputing them from the CSVs.
+    try:
+        summary_path = output_dir / "MaMadroid" / "run-summary.json"
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text(
+            json.dumps(summary.as_dict(), indent=2, sort_keys=True), encoding="utf-8")
+        log.info("summary written to %s", summary_path)
+    except OSError as exc:
+        log.warning("could not write the run summary: %s", exc)
+
     log.info("finished in %.1fs (%s)", summary.seconds,
              "clean" if summary.ok else "with failures")
     return summary

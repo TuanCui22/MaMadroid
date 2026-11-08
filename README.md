@@ -23,6 +23,7 @@ packaging, the path handling and the vectorised matrix build are this fork's.
 | **Structured output** | One CSV per mode, one row per APK, a fixed column set so rows from different runs line up. `--json` for machine consumption. |
 | **Lazy analysis imports** | `--help` and `--version` work on a bare Python. A missing analysis dependency names the package and the install command. |
 | **Honest zero rows** | A state with no outgoing transitions stays all-zero rather than becoming NaN — "never left this state" and "this state does not exist" are different facts. |
+| **Run report** | `--report out.html` writes one self-contained page: stage counts, per-mode density, and every app that produced an all-zero row, named. No server, no external requests. |
 
 ---
 
@@ -51,6 +52,8 @@ mamadroid -i /path/to/apks -o /path/to/output
 | `--data-dir DIR` | where `classes.txt`, `Packages.txt`, `Families11.txt` live |
 | `--memory SIZE` | JVM heap for the APK tooling, e.g. `2G` |
 | `--json` | print the run summary as JSON instead of text |
+| `--report PATH` | also write a self-contained HTML run report |
+| `--summary-in PATH` | a run summary JSON to embed in the report |
 | `--log-level LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 
 Exit codes: `0` clean, `1` a stage had failures, `2` a path is wrong, `3` a
@@ -88,10 +91,28 @@ export MAMADROID_DATA_DIR=/data/mamadroid
 export MAMADROID_PACKAGES=/data/mamadroid/Packages.txt
 ```
 
+## Run report
+
+```bash
+mamadroid -i /path/to/apks -o /path/to/output --report output/report.html
+```
+
+One self-contained HTML file: inline CSS, no script tags fetching anything, no
+listening port. It answers three questions in the order an analyst asks them —
+did the run work, is the matrix usable, and which apps are broken.
+
+The third one is the point. An all-zero row is not "no features": it means the
+app yielded no API transitions, which almost always means the APK conversion
+failed upstream. The page names those apps instead of leaving you to diff the
+CSVs. A value it cannot compute renders as a named gap, never as a zero.
+
+Every run also writes `MaMadroid/run-summary.json` next to the output, so the
+page and the terminal show the same numbers rather than two recomputations.
+
 ## Tests
 
 ```bash
-python -m pytest -q          # 14 tests, no APKs, no Java, no network
+python -m pytest -q          # 25 tests, no APKs, no Java, no network
 ```
 
 Coverage includes the matrix build (compared against the reference algorithm), the

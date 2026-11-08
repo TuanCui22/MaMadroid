@@ -22,6 +22,7 @@ Models* (Graziano, Canali, Bilge, Rao, Balzarotti). Phương pháp là của h�
 | **Đầu ra có cấu trúc** | Mỗi chế độ một CSV, mỗi APK một dòng, bộ cột cố định nên các dòng giữa các lần chạy thẳng hàng. `--json` cho máy đọc. |
 | **Import phân tích lazy** | `--help` và `--version` chạy được trên Python trơn. Thiếu dependency phân tích sẽ báo đúng tên package và lệnh cài. |
 | **Dòng rỗng trung thực** | Trạng thái không có chuyển tiếp đi ra vẫn là toàn số 0, không thành NaN — "chưa từng rời trạng thái này" và "trạng thái này không tồn tại" là hai sự kiện khác nhau. |
+| **Báo cáo lượt chạy** | `--report out.html` ghi một trang tự chứa: số lượng từng stage, mật độ theo từng mode, và tên từng app tạo ra dòng toàn số 0. Không server, không request ra ngoài. |
 
 ---
 
@@ -50,6 +51,8 @@ mamadroid -i /path/to/apks -o /path/to/output
 | `--data-dir DIR` | nơi chứa `classes.txt`, `Packages.txt`, `Families11.txt` |
 | `--memory SIZE` | heap JVM cho công cụ APK, ví dụ `2G` |
 | `--json` | in tóm tắt lượt chạy dạng JSON thay vì text |
+| `--report PATH` | ghi thêm báo cáo HTML tự chứa |
+| `--summary-in PATH` | file summary JSON để nhúng vào báo cáo |
 | `--log-level LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 
 Exit code: `0` sạch, `1` có stage lỗi, `2` đường dẫn sai, `3` thiếu file tham
@@ -87,10 +90,28 @@ export MAMADROID_DATA_DIR=/data/mamadroid
 export MAMADROID_PACKAGES=/data/mamadroid/Packages.txt
 ```
 
+## Báo cáo lượt chạy
+
+```bash
+mamadroid -i /path/to/apks -o /path/to/output --report output/report.html
+```
+
+Một file HTML tự chứa: CSS nhúng, không script nào gọi ra ngoài, không mở port.
+Trang trả lời ba câu theo đúng thứ tự người phân tích hỏi — lượt chạy có chạy
+được không, ma trận có dùng được không, và app nào bị hỏng.
+
+Câu thứ ba là điểm chính. Một dòng toàn số 0 không phải "không có đặc trưng": nó
+nghĩa là app đó không tạo ra chuyển tiếp API nào, gần như luôn là do bước chuyển
+đổi APK hỏng từ trước. Trang nêu tên các app đó thay vì để bạn tự diff CSV. Giá
+trị không tính được hiện ra thành khoảng trống có tên, không bao giờ thành số 0.
+
+Mỗi lượt chạy cũng ghi `MaMadroid/run-summary.json` cạnh thư mục output, để trang
+và terminal hiện cùng một con số thay vì hai lần tính lại.
+
 ## Kiểm thử
 
 ```bash
-python -m pytest -q          # 14 test, không cần APK, không cần Java, không cần mạng
+python -m pytest -q          # 25 test, không cần APK, không cần Java, không cần mạng
 ```
 
 Bộ test phủ phần dựng ma trận (so với thuật toán tham chiếu), trường hợp dòng toàn
