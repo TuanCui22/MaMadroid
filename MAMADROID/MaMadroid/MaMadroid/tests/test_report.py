@@ -98,7 +98,7 @@ class TestCollectAndRender(unittest.TestCase):
                          [["filename", "aToa"], ["app.txt", "1"]])
             page = report.render(report.collect(root))
 
-        self.assertIn("MaMaDroid", page)
+        self.assertIn("BOLTER", page)
         self.assertNotIn("src=\"http", page)
         self.assertNotIn("href=\"http", page)
         self.assertIn("<style>", page)

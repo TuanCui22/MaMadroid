@@ -131,7 +131,7 @@ PAGE = """<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MaMaDroid — run report</title>
+<title>BOLTER — run report</title>
 <style>
 :root{--bg:#0f1419;--panel:#161d26;--line:#243040;--ink:#e6edf3;--muted:#9aa8b6;
   --faint:#6b7a89;--red:#e5534b;--amber:#d29922;--teal:#2f9e8f;--blue:#3b82f6}
@@ -176,7 +176,7 @@ footer{margin-top:26px;padding-top:12px;border-top:1px solid var(--line);
   color:var(--faint);font-size:11.5px}
 </style></head><body><div class="wrap">
 <header>
-  <div><h1>MaMaDroid</h1>
+  <div><h1>BOLTER</h1>
     <div class="sub">Markov-chain behavioural features — run report</div></div>
   <div class="sub" id="stamp"></div>
 </header>
@@ -231,7 +231,7 @@ shown as a named gap, never as zero.</footer>
       'Every matrix is empty. The reference graph directories were probably missing.']);
   }
   if (totalEmpty > 0) {
-    gaps.push(['',' ' + totalEmpty + ' app(s) produced an all-zero row.',
+    gaps.push(['',' ' + totalEmpty + ' row(s) produced an all-zero row.',
       'An all-zero row is not "no features" - it means the app yielded no API transitions. Usually the APK conversion failed upstream; check the stage table below.']);
   }
   var s = d.summary;

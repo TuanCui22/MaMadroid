@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mamadroid"
+name = "bolter"
 version = "2.0.0"
 description = "Markov-chain behavioural features from Android APKs (MaMaDroid, NDSS 2017)"
 readme = "README.md"
@@ -30,7 +30,8 @@ dependencies = [
 dev = ["pytest>=8.0", "ruff>=0.6", "pyflakes>=3.2"]
 
 [project.scripts]
-mamadroid = "MaMadroid.cli:main"
+bolter = "MaMadroid.cli:main"
+mamadroid = "MaMadroid.cli:main"  # kept so existing installs keep working
 
 [tool.setuptools.packages.find]
 where = ["."]

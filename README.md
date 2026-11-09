@@ -1,4 +1,8 @@
-# MaMaDroid — Markov-chain behavioural features for Android APKs
+![BOLTER](docs/banner.svg)
+
+# BOLTER
+
+**Markov-chain behavioural features for Android APKs.**
 
 Turns an APK into a fixed-size numeric feature vector by walking its call graph
 and recording which abstracted API states transition into which. The vector is

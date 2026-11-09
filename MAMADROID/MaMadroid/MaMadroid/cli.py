@@ -28,10 +28,10 @@ EXIT_DATA = 3
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="mamadroid",
+        prog="bolter",
         description="Build MaMaDroid Markov-chain features from a directory of APK files.",
         epilog="Reference data resolves from the package directory. Override with "
-               "MAMADROID_DATA_DIR or --data-dir.",
+               "MAMADROID_DATA_DIR or --data-dir. the old name still works and runs the same command.",
     )
     parser.add_argument("--version", action="version",
                         version="mamadroid %s" % __version__)

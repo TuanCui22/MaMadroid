@@ -1,4 +1,8 @@
-# MaMaDroid — trích đặc trưng hành vi APK Android bằng chuỗi Markov
+![BOLTER](docs/banner.svg)
+
+# BOLTER
+
+**Đặc trưng hành vi APK Android bằng chuỗi Markov.**
 
 Biến một APK thành vector số có kích thước cố định bằng cách đi qua call graph của
 nó và ghi lại trạng thái API trừu tượng nào chuyển sang trạng thái nào. Vector đó
