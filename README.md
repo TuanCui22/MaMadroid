@@ -16,6 +16,28 @@ packaging, the path handling and the vectorised matrix build are this fork's.
 
 ---
 
+
+## What it looks like
+
+```
+$ bolter --help
+usage: bolter [-h] [--version] -i DIR -o DIR [-m MODE] [--data-dir DIR]
+              [--memory SIZE] [--log-level LEVEL] [--json] [--report PATH]
+              [--summary-in PATH]
+
+  -i, --input DIR    directory containing the APK files to analyse
+  -o, --output DIR   directory for graphs, sequences and feature CSVs
+  -m, --mode MODE    feature mode; repeatable (default Families and Packages)
+  --report PATH      also write a self-contained HTML run report
+```
+
+One run, one directory of APKs, one CSV per mode. `--mode` is repeatable, so a
+single pass can emit `Families` and `Packages` matrices that line up row for row.
+
+`--report out.html` writes a page that answers the question the CSVs cannot: which
+apps produced an all-zero row, and therefore which APKs failed to convert
+upstream. No server, no external requests.
+
 ## Capabilities
 
 | | |
@@ -34,8 +56,8 @@ packaging, the path handling and the vectorised matrix build are this fork's.
 ## Install
 
 ```bash
-git clone https://github.com/TuanCui22/MaMadroid.git
-cd MaMadroid
+git clone https://github.com/TuanCui22/bolter.git
+cd bolter
 python -m pip install -e .
 ```
 
@@ -45,7 +67,7 @@ stage shells out to them). `python -m pip install -e ".[dev]"` adds the test too
 ## Use
 
 ```bash
-mamadroid -i /path/to/apks -o /path/to/output
+bolter -i /path/to/apks -o /path/to/output
 ```
 
 | Flag | Meaning |
@@ -98,7 +120,7 @@ export MAMADROID_PACKAGES=/data/mamadroid/Packages.txt
 ## Run report
 
 ```bash
-mamadroid -i /path/to/apks -o /path/to/output --report output/report.html
+bolter -i /path/to/apks -o /path/to/output --report output/report.html
 ```
 
 One self-contained HTML file: inline CSS, no script tags fetching anything, no

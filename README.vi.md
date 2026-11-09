@@ -15,6 +15,28 @@ Models* (Graziano, Canali, Bilge, Rao, Balzarotti). Phương pháp là của h�
 
 ---
 
+
+## Trông thế nào khi chạy
+
+```
+$ bolter --help
+usage: bolter [-h] [--version] -i DIR -o DIR [-m MODE] [--data-dir DIR]
+              [--memory SIZE] [--log-level LEVEL] [--json] [--report PATH]
+              [--summary-in PATH]
+
+  -i, --input DIR    directory containing the APK files to analyse
+  -o, --output DIR   directory for graphs, sequences and feature CSVs
+  -m, --mode MODE    feature mode; repeatable (default Families and Packages)
+  --report PATH      also write a self-contained HTML run report
+```
+
+Một lượt chạy, một thư mục APK, một CSV cho mỗi mode. `--mode` lặp được, nên một
+lần chạy có thể xuất cả ma trận `Families` và `Packages` thẳng hàng theo từng dòng.
+
+`--report out.html` ghi một trang trả lời câu mà CSV không trả lời được: app nào
+tạo ra dòng toàn số 0, tức là APK nào hỏng ở bước chuyển đổi phía trước. Không
+server, không request ra ngoài.
+
 ## Năng lực
 
 | | |
@@ -33,8 +55,8 @@ Models* (Graziano, Canali, Bilge, Rao, Balzarotti). Phương pháp là của h�
 ## Cài đặt
 
 ```bash
-git clone https://github.com/TuanCui22/MaMadroid.git
-cd MaMadroid
+git clone https://github.com/TuanCui22/bolter.git
+cd bolter
 python -m pip install -e .
 ```
 
@@ -44,7 +66,7 @@ gọi ra ngoài). `python -m pip install -e ".[dev]"` cài thêm công cụ test
 ## Dùng
 
 ```bash
-mamadroid -i /path/to/apks -o /path/to/output
+bolter -i /path/to/apks -o /path/to/output
 ```
 
 | Cờ | Ý nghĩa |
@@ -97,7 +119,7 @@ export MAMADROID_PACKAGES=/data/mamadroid/Packages.txt
 ## Báo cáo lượt chạy
 
 ```bash
-mamadroid -i /path/to/apks -o /path/to/output --report output/report.html
+bolter -i /path/to/apks -o /path/to/output --report output/report.html
 ```
 
 Một file HTML tự chứa: CSS nhúng, không script nào gọi ra ngoài, không mở port.
